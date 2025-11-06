@@ -7,7 +7,8 @@ from unittest.mock import Mock, MagicMock
 from queue import Full
 
 import sys
-sys.path.insert(0, '/home/runner/work/async-cached-hfglm/async-cached-hfglm')
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from async_cached_hfglm import AsyncGLM
 

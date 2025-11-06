@@ -2,8 +2,9 @@
 
 import asyncio
 import threading
+import time
 from typing import Any, Dict, List, Optional, Union
-from queue import Queue, Full
+from queue import Queue, Full, Empty
 import torch
 
 
@@ -95,8 +96,8 @@ class AsyncGLM:
                 finally:
                     self._task_queue.task_done()
                     
-            except Exception:
-                # Timeout or other exception, continue
+            except Empty:
+                # Queue timeout, check if we should continue
                 if self._shutdown_event.is_set():
                     break
                 continue
@@ -190,7 +191,6 @@ class AsyncGLM:
             TimeoutError: If timeout expires before result is ready
             RuntimeError: If task failed with an error
         """
-        import time
         start_time = time.time()
         
         while True:
@@ -278,7 +278,11 @@ class AsyncGLM:
         Returns:
             Task ID that can be used to retrieve results
         """
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Fall back for older Python versions or when not in async context
+            loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.submit, inputs, generation_kwargs)
     
     async def get_result_async(self, task_id: int, timeout: Optional[float] = None) -> Any:
@@ -292,5 +296,9 @@ class AsyncGLM:
         Returns:
             The generated output from the model
         """
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Fall back for older Python versions or when not in async context
+            loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.get_result, task_id, timeout)

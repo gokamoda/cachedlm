@@ -160,13 +160,14 @@ def parallel_processing_pattern():
     Demonstrate parallel processing pattern where postprocessing
     happens while generation is still running.
     """
+    import time
+    
     print("Parallel processing pattern (with dummy model):")
     print()
     
     # Create a dummy model for demonstration
     class DummyModel:
         def generate(self, input_ids, **kwargs):
-            import time
             time.sleep(0.1)  # Simulate generation time
             if isinstance(input_ids, torch.Tensor):
                 return torch.cat([input_ids, torch.ones_like(input_ids[:, :5])], dim=1)
