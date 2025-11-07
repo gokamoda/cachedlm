@@ -94,8 +94,6 @@ def postprocess_prob_generation(
     mask_noeos = mask.clone()
     mask_noeos[:, -1] = 0
 
-    print(mask)
-
     # replace padding with 0
     next_token_ids[next_token_ids == -1] = 0  # can be anything if positive
 

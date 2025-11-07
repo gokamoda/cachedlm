@@ -216,7 +216,6 @@ class CollatorWithPositionIds(BaseDataCollator):
 
         # pad tokenized sequences to the longest sequence
         max_length = max(len(seq) for seq in tokenized)
-        print(max_length)
         padded = [
             [self.tokenizer.pad_token_id] * (max_length - len(seq)) + seq
             for seq in tokenized
