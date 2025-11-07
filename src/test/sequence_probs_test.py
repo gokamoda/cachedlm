@@ -3,10 +3,10 @@ from x_sequence_probs import main
 from pathlib import Path
 from test.test_models import TEST_MODELS
 from transformers import AutoTokenizer
-from clm.data import CollatorWithPositionIds, BaseInputs, BaseDataset, SeqProbInputs
+from cachedlm.data import CollatorWithPositionIds, BaseInputs, BaseDataset, SeqProbInputs
 from torch.utils.data import DataLoader
-from clm import ModelCallWithCache
-from clm.postprocess import postprocess_prob_generation
+from cachedlm import ModelCallWithCache
+from cachedlm.postprocess import postprocess_prob_generation
 from functools import partial
 import torch
 

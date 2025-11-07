@@ -1,11 +1,11 @@
 from functools import partial
 from typing import Generator
 
-from clm import (
+from cachedlm import (
     ModelCallWithCache,
     postprocess_prob_generation
 )
-from clm.data import (
+from cachedlm.data import (
     CollatorWithPositionIds,
     BaseInputs,
     BaseInstance,

@@ -1,11 +1,11 @@
 from functools import partial
 from typing import Generator
 
-from clm import (
+from cachedlm import (
     DeterministicModelWithCache,
     postprocess_get_label_probs
 )
-from clm.data import (
+from cachedlm.data import (
     BaseDataCollator,
     BaseInputs,
     BaseInstance
