@@ -1,5 +1,5 @@
 [project]
-name = "template"
+name = "cached-transformer"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
@@ -108,3 +108,7 @@ keep-runtime-typing = true  # Settings for Python 3.8 compatibility
 [tool.ruff.format]
 quote-style = "double"
 line-ending = "auto"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
