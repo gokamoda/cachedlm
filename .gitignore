@@ -1,0 +1,9 @@
+.pytest_cache
+.ruff_cache
+.venv
+data
+__pycache__
+.ipynb_checkpoints
+*.log
+uv.lock
+ptcache
