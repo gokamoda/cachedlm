@@ -364,10 +364,8 @@ class DeterministicModelWithCache:
         generation_kwargs: dict,
         collator: BaseDataCollator,
         post_process_fn: callable,
-        cache_file_name: str,
         batch_size: int = 32,
         dynamic_batch_sizing: bool = True,
-        recompute: bool = False,
     ) -> Generator[BatchGenerationResult, None, None]:
         self.cache_reader = CacheReader(
             cache_jsonl_path=self.cache_jsonl_path,

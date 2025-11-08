@@ -63,7 +63,6 @@ def main(
     labels = ["0", "1"]
 
     result_generator = model.run_inference(
-        cache_file_name="test-model-with-cache",
         generation_kwargs={
             "return_dict_in_generate": True,
             "do_sample": False,

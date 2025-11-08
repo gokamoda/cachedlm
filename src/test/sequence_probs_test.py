@@ -123,7 +123,6 @@ def test_batch(
     # Run batch with longer sequences
     prefixes, suffixes = zip(*data)
     result_generator = model.run_inference(
-        cache_file_name="test-model-with-cache",
         generation_kwargs={
             "return_dict_in_generate": True,
             "do_sample": False,
@@ -156,7 +155,6 @@ def test_batch(
     data = data[-1:]  # Only keep the last one
     prefixes, suffixes = zip(*data)
     result_generator = model.run_inference(
-        cache_file_name="test-model-with-cache",
         generation_kwargs={
             "return_dict_in_generate": True,
             "do_sample": False,

@@ -62,7 +62,6 @@ def main(
     prompts = get_example_prompts()
 
     result_generator = model.run_inference(
-        cache_file_name="test-model-with-cache",
         generation_kwargs={
             "return_dict_in_generate": True,
             "do_sample": False,
