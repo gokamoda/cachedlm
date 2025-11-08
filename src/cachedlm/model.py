@@ -396,7 +396,7 @@ class DeterministicModelWithCache:
             generation_kwargs=generation_kwargs,
             collator=collator,
             batch_size=batch_size,
-            inputs=inputs,
+            inputs=inputs_to_compute,
         ):
             post_processed = post_process_fn(batch_result)
             self.cache_reader.cache_results(post_processed)
