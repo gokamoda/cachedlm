@@ -5,10 +5,10 @@ import torch
 from transformers import AutoTokenizer
 
 from .data import (
-    BaseInputs,
+    BaseInput,
     BaseInstance,
     BatchGenerationResult,
-    SeqProbInputs,
+    SeqProbInput,
 )
 from .typing import BATCH, HIDDEN_DIM, SEQUENCE, VOCAB, Tensor
 

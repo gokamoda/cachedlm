@@ -2,13 +2,14 @@ from functools import partial
 from typing import Generator
 
 from cachedlm import (
+    JobManager,
     DeterministicModelWithCache,
-    postprocess_get_label_probs
+    postprocess_get_label_probs,
 )
 from cachedlm.data import (
     BaseDataCollator,
-    BaseInputs,
-    BaseInstance
+    SimpleInput,
+    BaseInstance,
 )
 
 
@@ -60,9 +61,12 @@ def main(
     )
 
     prompts = get_example_prompts()
+    inputs=[SimpleInput(prompt=prompt, _id=_id) for _id, prompt in enumerate(prompts)]
     labels = ["0", "1"]
 
-    result_generator = model.run_inference(
+    job_manager = JobManager(model=model)
+
+    result_generator = job_manager.submit(
         generation_kwargs={
             "return_dict_in_generate": True,
             "do_sample": False,
@@ -70,7 +74,7 @@ def main(
             "max_new_tokens": 6,
             "output_logits": True,
         },
-        inputs=[BaseInputs(prompt=prompt) for prompt in prompts],
+        inputs=inputs,
         collator=BaseDataCollator(model.tokenizer),
         batch_size=2,
         post_process_fn=partial(postprocess_get_label_probs, model.tokenizer, labels),

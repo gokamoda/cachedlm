@@ -2,13 +2,14 @@ from functools import partial
 from typing import Generator
 
 from cachedlm import (
+    JobManager,
     DeterministicModelWithCache,
     postprocess_simple_generation,
 )
 from cachedlm.data import (
     BaseDataCollator,
-    BaseInputs,
-    BaseInstance
+    SimpleInput,
+    BaseInstance,
 )
 
 
@@ -29,6 +30,8 @@ def get_example_instruction():
 
 def get_example_targets():
     targets = [
+        "This is the worst experience I have ever had.",
+        "This is the worst experience I have ever had.",
         "This is the worst experience I have ever had.",
         "The service was okay, nothing special.",
         "I am extremely satisfied with the quality.",
@@ -51,7 +54,7 @@ def get_example_prompts():
 
 
 def main(
-    cache_jsonl_path="data/classification_cache.jsonl",
+    cache_jsonl_path="data/generation_cache.jsonl",
     model_name_or_path="meta-llama/Llama-3.2-3B-Instruct",
 ) -> Generator[list[BaseInstance], None, None]:
     model = DeterministicModelWithCache(
@@ -60,15 +63,18 @@ def main(
     )
 
     prompts = get_example_prompts()
+    inputs=[SimpleInput(prompt=prompt, _id=_id) for _id, prompt in enumerate(prompts)]
 
-    result_generator = model.run_inference(
+    job_manager = JobManager(model=model)
+
+    result_generator = job_manager.submit(
         generation_kwargs={
             "return_dict_in_generate": True,
             "do_sample": False,
             "pad_token_id": model.tokenizer.eos_token_id,
             "max_new_tokens": 6,
         },
-        inputs=[BaseInputs(prompt=prompt) for prompt in prompts],
+        inputs=inputs,
         collator=BaseDataCollator(model.tokenizer),
         batch_size=2,
         post_process_fn=partial(postprocess_simple_generation, model.tokenizer),

@@ -2,14 +2,14 @@ from functools import partial
 from typing import Generator
 
 from cachedlm import (
+    JobManager,
     ModelCallWithCache,
     postprocess_prob_generation
 )
 from cachedlm.data import (
     CollatorWithPositionIds,
-    BaseInputs,
     BaseInstance,
-    SeqProbInputs
+    SeqProbInput
 )
 
 
@@ -30,7 +30,7 @@ def get_example_data():
 
 
 def main(
-    cache_jsonl_path="data/classification_cache.jsonl",
+    cache_jsonl_path="data/seqprob_cache.jsonl",
     model_name_or_path="meta-llama/Llama-3.2-3B-Instruct",
 ) -> Generator[list[BaseInstance], None, None]:
     model = ModelCallWithCache(
@@ -40,25 +40,23 @@ def main(
 
     data = get_example_data()
     prefixes, suffixes = zip(*data)
+    inputs = [
+        SeqProbInput(
+            _id=_id,
+            prefix=prefix,
+            suffix=suffix,
+            eos_token_id=model.tokenizer.eos_token_id,
+        )
+        for _id, (prefix, suffix) in enumerate(zip(prefixes, suffixes))
+    ]
 
+    job_manager = JobManager(model=model)
 
-    result_generator = model.run_inference(
+    result_generator = job_manager.submit(
         generation_kwargs={
-            "return_dict_in_generate": True,
-            "do_sample": False,
-            "pad_token_id": model.tokenizer.eos_token_id,
-            "max_new_tokens": 6,
             "output_logits": True,
         },
-        inputs=[
-            SeqProbInputs(
-                prefix=prefix,
-                suffix=suffix,
-                eos_token_id=model.tokenizer.eos_token_id,
-                length_penalty=None,
-            )
-            for prefix, suffix in zip(prefixes, suffixes)
-        ],
+        inputs=inputs,
         collator=CollatorWithPositionIds(model.tokenizer),
         batch_size=2,
         post_process_fn=partial(postprocess_prob_generation, model.tokenizer),

@@ -3,11 +3,12 @@ from typing import Generator
 
 from cachedlm import (
     DeterministicModelWithCache,
+    JobManager,
     postprocess_get_hidden_states
 )
 from cachedlm.data import (
     BaseDataCollator,
-    BaseInputs,
+    SimpleInput,
     BaseInstance
 )
 from pathlib import Path
@@ -66,7 +67,10 @@ def main(
     )
     ptcache_dir.mkdir(parents=True, exist_ok=True)
 
-    result_generator = model.run_inference(
+    inputs = [SimpleInput(prompt=prompt, _id=_id) for _id, prompt in enumerate(prompts)]
+    job_manager = JobManager(model=model)
+
+    result_generator = job_manager.submit(
         generation_kwargs={
             "return_dict_in_generate": True,
             "do_sample": False,
@@ -74,7 +78,7 @@ def main(
             "output_hidden_states": True,
             "max_new_tokens": 1,
         },
-        inputs=[BaseInputs(prompt=prompt) for prompt in prompts],
+        inputs=inputs,
         collator=BaseDataCollator(model.tokenizer),
         batch_size=2,
         post_process_fn=partial(

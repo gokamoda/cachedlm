@@ -3,7 +3,7 @@ from x_sequence_probs import main
 from pathlib import Path
 from test.test_models import TEST_MODELS
 from transformers import AutoTokenizer
-from cachedlm.data import CollatorWithPositionIds, BaseInputs, BaseDataset, SeqProbInputs
+from cachedlm.data import CollatorWithPositionIds, BaseInput, BaseDataset, SeqProbInput
 from torch.utils.data import DataLoader
 from cachedlm import ModelCallWithCache
 from cachedlm.postprocess import postprocess_prob_generation
@@ -52,13 +52,13 @@ def test_collator(model_name_or_path):
     batch_size = 2
 
     inputs = [
-        SeqProbInputs(
+        SeqProbInput(
+            _id=_id,
             prefix=prefix,
             suffix=suffix,
             eos_token_id=tokenizer.eos_token_id,
-            length_penalty=None,
         )
-        for prefix, suffix in zip(prefixes, suffixes)
+        for _id, (prefix, suffix) in enumerate(zip(prefixes, suffixes))
     ]
 
     dataset = BaseDataset(
@@ -131,13 +131,14 @@ def test_batch(
             "output_logits": True,
         },
         inputs=[
-            SeqProbInputs(
+            SeqProbInput(
+                _id=_id,
                 prefix=prefix,
                 suffix=suffix,
                 eos_token_id=model.tokenizer.eos_token_id,
                 length_penalty=None,
             )
-            for prefix, suffix in zip(prefixes, suffixes)
+            for _id, (prefix, suffix) in enumerate(zip(prefixes, suffixes))
         ],
         collator=CollatorWithPositionIds(model.tokenizer),
         batch_size=4,
@@ -163,13 +164,14 @@ def test_batch(
             "output_logits": True,
         },
         inputs=[
-            SeqProbInputs(
+            SeqProbInput(
+                _id=_id,
                 prefix=prefix,
                 suffix=suffix,
                 eos_token_id=model.tokenizer.eos_token_id,
                 length_penalty=None,
             )
-            for prefix, suffix in zip(prefixes, suffixes)
+            for _id, (prefix, suffix) in enumerate(zip(prefixes, suffixes))
         ],
         collator=CollatorWithPositionIds(model.tokenizer),
         batch_size=4,

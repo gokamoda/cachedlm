@@ -1,13 +1,13 @@
 from .data import (
     BaseDataCollator,
     BaseDataset,
-    BaseInputs,
+    BaseInput,
     BaseInstance,
     BatchGenerationResult,
     CollatorWithPositionIds,
-    SeqProbInputs,
+    SeqProbInput,
 )
-from .model import DeterministicModelWithCache, ModelCallWithCache
+from .model import DeterministicModelWithCache, ModelCallWithCache, JobManager
 from .postprocess import (
     postprocess_get_hidden_states,
     postprocess_get_label_probs,
@@ -19,13 +19,13 @@ __all__ = [
     "BaseDataCollator",
     "BatchGenerationResult",
     "BaseDataset",
-    "BaseInputs",
+    "BaseInput",
     "BaseInstance",
-    "SeqProbInputs",
+    "SeqProbInput",
     "CollatorWithPositionIds",
     "DeterministicModelWithCache",
     "ModelCallWithCache",
-    "ModelCallWithCache",
+    "JobManager",
     "postprocess_simple_generation",
     "postprocess_get_label_probs",
     "postprocess_prob_generation",

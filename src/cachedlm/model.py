@@ -6,6 +6,7 @@ from typing import Generator
 
 import polars as pl
 import torch
+from copy import deepcopy
 from torch.utils.data import DataLoader
 from tqdm import tqdm as std_tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -13,10 +14,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from .data import (
     BaseDataCollator,
     BaseDataset,
-    BaseInputs,
+    BaseInput,
     BaseInstance,
     BatchGenerationResult,
 )
+from pprint import pprint
 from .typing import BATCH, Tensor
 from .utils.int_utils import check_power_of_2
 from .utils.logger import init_logging
@@ -38,7 +40,7 @@ class CacheReader:
 
     def get_inputs_to_compute(
         self,
-        inputs: list[BaseInputs],
+        inputs: list[BaseInput],
         generation_kwargs: dict,
     ):
         # format queries
@@ -47,30 +49,22 @@ class CacheReader:
         ]
         df_queries = pl.DataFrame([instance.to_json() for instance in instances])
         input_columns = df_queries.columns.copy()
+        input_columns_no_id = [col for col in input_columns if col != "input_kwargs___id"]
+
         print(f"Input columns: {input_columns}")
-        df_queries = df_queries.select(input_columns).unique(subset=input_columns)
+        df_queries = df_queries.select(input_columns).unique(subset=input_columns_no_id)
 
         # prepare results dataframe
         precomputed_results = pl.DataFrame()
 
         if self.cache_jsonl_path.exists():  # load cache
-            if df_queries.height != df_queries.unique(subset=input_columns).height:
-                print(
-                    f"duplicate queries found: {df_queries.height - df_queries.unique(subset=input_columns).height}",
-                    df_queries.with_columns(
-                        pl.count().over(input_columns).alias("count")
-                    )
-                    .filter(pl.col("count") > 1)[0]
-                    .to_dicts(),
-                )
-
             logger.info(f"Loading precomputed results from {self.cache_jsonl_path}")
             precomputed_results = pl.read_ndjson(self.cache_jsonl_path)
 
             logger.info(f"{df_queries.height=}")
             precomputed_results = df_queries.join(
                 precomputed_results,
-                on=input_columns,
+                on=input_columns_no_id,
                 how="inner",
             )
             logger.info(f"{precomputed_results.height=}")
@@ -118,7 +112,7 @@ class CacheReader:
             logger.info(
                 f"Cache file {self.cache_jsonl_path} does not exist. Creating new one."
             )
-            new_results_df = pl.DataFrame(new_results)
+            new_results_df = pl.DataFrame(new_results).drop('input_kwargs___id')
             new_results_df.write_ndjson(self.cache_jsonl_path)
             logger.info(f"Saved new results to {self.cache_jsonl_path}")
             return new_results_df
@@ -128,11 +122,11 @@ class CacheReader:
             pre_computed_results = pl.read_ndjson(self.cache_jsonl_path)
         except Exception as e:
             logger.error(e)
-            new_results_df = pl.DataFrame(new_results)
+            new_results_df = pl.DataFrame(new_results).drop('input_kwargs___id')
             new_results_df.write_ndjson(self.cache_jsonl_path)
             return new_results_df
 
-        new_results_df = pl.DataFrame(new_results)
+        new_results_df = pl.DataFrame(new_results).drop('input_kwargs___id')
         pl.concat([pre_computed_results, new_results_df], how="vertical").write_ndjson(
             self.cache_jsonl_path
         )
@@ -195,7 +189,7 @@ class DeterministicModelWithCache:
     def __repr__(self):
         return f"DeterministicModelWithCache(model_name_or_path={self.model_name_or_path}, cache_jsonl_path={self.cache_jsonl_path})"
 
-    def set_instance_ids(self, inputs: list[BaseInputs]):
+    def set_instance_ids(self, inputs: list[BaseInput]):
         for i, _input in enumerate(inputs):
             _input.instance_id = i
 
@@ -207,7 +201,7 @@ class DeterministicModelWithCache:
 
     def batch_generate(
         self,
-        inputs: list[BaseInputs],
+        inputs: list[BaseInput],
         generation_kwargs: dict,
         collator: BaseDataCollator,
         batch_size: int = 32,
@@ -277,7 +271,7 @@ class DeterministicModelWithCache:
 
     def batch_generate_dynamic(
         self,
-        inputs: list[BaseInputs],
+        inputs: list[BaseInput],
         generation_kwargs: dict,
         collator: BaseDataCollator,
         batch_size: int = 32,
@@ -295,11 +289,9 @@ class DeterministicModelWithCache:
                 self.model.generation_config.temperature = None
                 self.model.generation_config.top_p = None
 
-        # set instance ids
-        inputs = self.set_instance_ids(inputs)
-
-        # keep track of pops from inputs when computation is done
+        _id_list = [_input._id for _input in inputs]
         pop_offsets = torch.zeros(len(inputs), dtype=torch.int32)
+        print(f"Processing {_id_list}")
 
         while True:  # error when out of memory
             try:
@@ -314,16 +306,12 @@ class DeterministicModelWithCache:
                 for batch_id, batch_result in enumerate(batch_result_generator):
                     batch_result: BatchGenerationResult
                     for _input in batch_result.inputs:
-                        # remove from inputs list
-                        inputs.pop(_input.instance_id - pop_offsets[_input.instance_id])
-                        # adjust pop offsets
-                        pop_offsets[_input.instance_id + 1 :] += 1
-
-                    batch_result.remove_input_instance_ids()
-
+                        inputs.pop(_id_list.index(_input._id) - pop_offsets[_id_list.index(_input._id)])
+                        pop_offsets[_id_list.index(_input._id) + 1 :] += 1
+        
                     yield batch_result
 
-                    if len(inputs) == 0:  # all done
+                    if len(inputs) == 0:
                         batch_result_generator.close()
                         torch.cuda.empty_cache()
                         return
@@ -360,13 +348,13 @@ class DeterministicModelWithCache:
 
     def run_inference(
         self,
-        inputs: list[BaseInputs],
+        inputs: list[BaseInput],
         generation_kwargs: dict,
         collator: BaseDataCollator,
         post_process_fn: callable,
         batch_size: int = 32,
         dynamic_batch_sizing: bool = True,
-    ) -> Generator[BatchGenerationResult, None, None]:
+    ) -> Generator[list[BaseInstance], None, None]:
         self.cache_reader = CacheReader(
             cache_jsonl_path=self.cache_jsonl_path,
         )
@@ -409,3 +397,79 @@ class ModelCallWithCache(DeterministicModelWithCache):
             for k, v in model_input_kwargs.items()
         }
         return self.model(**model_input_kwargs, **generation_kwargs)
+
+
+class JobManager:
+    job_mapping: dict[str, list[str]]
+    model: ModelCallWithCache
+
+    def __init__(self, model: ModelCallWithCache):
+        self.model = model
+
+    def submit(
+        self,
+        inputs: list[BaseInput],
+        generation_kwargs: dict,
+        collator: BaseDataCollator,
+        post_process_fn: callable,
+        batch_size: int = 32,
+        dynamic_batch_sizing: bool = True,
+    ) -> Generator[BatchGenerationResult, None, None]:
+        """
+        Detect duplicate inputs, save mapping of ids to duplicate result after job is done
+        """
+
+        json_inputs = [input_instance.to_json() for input_instance in inputs]
+
+        assert len(json_inputs) == len(set(d['_id'] for d in json_inputs)), "Input IDs must be unique"
+
+        input_df = pl.DataFrame(
+            json_inputs
+        )
+        unique_columns = input_df.columns.copy()
+        unique_columns.remove("_id")
+
+        ## Create job mapping
+        self.job_mapping = {}
+        representative_input_indices = []
+        input_df = input_df.with_row_index(name='job-manager-index')  
+
+        for _, group in input_df.group_by(unique_columns):
+            ids = group["_id"].to_list()
+            representative_id = ids[0]
+            self.job_mapping[representative_id] = ids
+
+            job_manager_indices = group["job-manager-index"].to_list()
+            representative_job_manager_index = job_manager_indices[0]
+            representative_input_indices.append(representative_job_manager_index)
+
+        ## remove duplicates
+        unique_inputs = [
+            inputs[i] for i in representative_input_indices
+        ]
+
+        ## Run job
+        result_generator = self.model.run_inference(
+            generation_kwargs=generation_kwargs,
+            inputs=unique_inputs,
+            collator=collator,
+            post_process_fn=post_process_fn,
+            batch_size=batch_size,
+            dynamic_batch_sizing=dynamic_batch_sizing,
+        )
+
+        for batch_result in result_generator:
+            # duplicate results based on job mapping
+            duplicated_results = []
+
+            for instance in batch_result:
+                representative_id = instance.input_kwargs___id
+                if representative_id in self.job_mapping:
+                    for duplicate_id in self.job_mapping[representative_id]:
+                        duplicated_instance = deepcopy(instance)
+                        duplicated_instance.input_kwargs___id = duplicate_id
+                        duplicated_results.append(duplicated_instance)
+                else:
+                    duplicated_results.append(instance)
+
+            yield duplicated_results

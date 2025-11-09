@@ -11,55 +11,54 @@ from .typing import SEQUENCE, Tensor
 
 
 @dataclass
-class AbstractInput:
-    def __repr__(self):
-        msg = self.__class__.__name__ + ":\n"
-        for k, v in self.__dict__.items():
-            if isinstance(v, torch.Tensor):
-                msg += f"\t{k}: {v.shape}\n"
-            elif isinstance(v, AbstractInput):
-                msg += f"\t{k}: {v.__class__.__name__}\n"
-            else:
-                msg += f"\t{k}: {v}\n"
-        return msg
+class BaseInput:
+    _id: str
 
-    def __init__(self, **kwargs):
-        # Get the field names from the dataclass
-        field_names = {f.name for f in fields(self.__class__)}
-        for key, value in kwargs.items():
-            if key in field_names:
-                setattr(self, key, value)
-        # Handle ignored/unexpected keys
-        ignored_keys = set(kwargs) - field_names
-        if ignored_keys:
-            print(f"Ignored unexpected keys: {ignored_keys}")
-
-    @classmethod
-    def init_all(cls, **kwargs):
-        for key, value in kwargs.items():
-            setattr(cls, key, value)
-
-    def remove_instance_id(self):
-        if hasattr(self, "instance_id"):
-            delattr(self, "instance_id")
-
-
-@dataclass(repr=False, init=False)
-class BaseInputs(AbstractInput):
-    prompt: str
-    instance_id = None  # reserved
-
-    def get_prompt(self) -> str:
-        return self.prompt
+    def to_json(self):
+        return self.__dict__
+    
+    def __post_init__(self):
+        if not isinstance(self._id, str):
+            self._id = str(self._id)
 
     def __len__(self):
+        raise NotImplementedError
+    
+    def get_prompt(self) -> str:
+        raise NotImplementedError
+    
+
+
+@dataclass
+class SimpleInput(BaseInput):
+    prompt: str
+    
+    def __len__(self):
         return len(self.prompt)
+    
+    def get_prompt(self) -> str:
+        return self.prompt
+    
+
+@dataclass
+class SeqProbInput(BaseInput):
+    prefix: str
+    suffix: str
+    eos_token_id: int
+    length_penalty: float = 0.0
+
+    def __len__(self):
+        return len(self.prefix + self.suffix)
+    
+    # As function for readability
+    def set_field__suffix_tokens(self, suffix_tokens: Tensor):
+        setattr(self, "suffix_tokens", suffix_tokens)
 
 
 class BaseDataset(Dataset):
     prompts: list[str]
 
-    def __init__(self, inputs: list[BaseInputs]):
+    def __init__(self, inputs: list[BaseInput]):
         self.inputs = inputs
 
     def __len__(self):
@@ -76,7 +75,7 @@ class BaseDataCollator:
     ):
         self.tokenizer = tokenizer
 
-    def __call__(self, inputs: list[BaseInputs]) -> tuple[list[str], dict]:
+    def __call__(self, inputs: list[BaseInput]) -> tuple[list[str], dict]:
         prompts = [_input.get_prompt() for _input in inputs]
         tokenizer_output = self.tokenizer(
             prompts, return_tensors="pt", padding="longest"
@@ -144,8 +143,8 @@ class BaseInstance:
         return category_dict
 
     @staticmethod
-    def dict_to_inputs(input_dict: dict, cls) -> "BaseInputs":
-        # Create a BaseInputs instance from a dictionary, removing prefixes
+    def dict_to_inputs(input_dict: dict, cls) -> "BaseInput":
+        # Create a BaseInput instance from a dictionary, removing prefixes
         input_kwargs = {
             key.replace("input_kwargs__", ""): value
             for key, value in input_dict.items()
@@ -156,7 +155,7 @@ class BaseInstance:
 
 @dataclass
 class BatchGenerationResult:
-    inputs: list[BaseInputs]
+    inputs: list[BaseInput]
     model_inputs: BatchEncoding
     generation_kwargs: dict[str, Any]
     outputs: GenerateDecoderOnlyOutput
@@ -166,35 +165,10 @@ class BatchGenerationResult:
             input_instance.remove_instance_id()
 
 
-@dataclass(repr=False, init=False)
-class SeqProbInputs(AbstractInput):
-    prefix: str
-    suffix: str
-    suffix_tokens: Tensor[SEQUENCE]
-    eos_token_id: int
-    length_penalty: float | None = None
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if self.length_penalty is None:
-            self.length_penalty = 0.0
-
-    def get_prompt(self) -> str:
-        return self.prefix
-
-    def __len__(self):
-        return len(self.prefix + self.suffix)
-
 
 class CollatorWithPositionIds(BaseDataCollator):
-    # def __call__(self, inputs: list[BaseInputs]) -> tuple[list[str], dict]:
-    #     prompts = [_input.get_prompt() for _input in inputs]
-    #     tokenizer_output = self.tokenizer(
-    #         prompts, return_tensors="pt", padding="longest"
-    #     )
-    #     return inputs, tokenizer_output
 
-    def __call__(self, inputs: list[SeqProbInputs]) -> tuple[list[str], dict]:
+    def __call__(self, inputs: list[SeqProbInput]) -> tuple[list[str], dict]:
         prefix_tokenized = [
             self.tokenizer.encode(
                 _input.prefix, add_special_tokens=True, return_tensors="pt"
@@ -239,5 +213,5 @@ class CollatorWithPositionIds(BaseDataCollator):
         }
 
         for _input, tokenized_seq in zip(inputs, suffixes_tokenized):
-            _input.suffix_tokens = tokenized_seq.squeeze(0)
+            _input.set_field__suffix_tokens(tokenized_seq.squeeze(0))
         return inputs, tokenizer_output
