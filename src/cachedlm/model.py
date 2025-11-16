@@ -186,6 +186,11 @@ class DeterministicModelWithCache:
 
         self.model.eval()
 
+    def unload_model(self):
+        del self.model
+        self.model = None
+        torch.cuda.empty_cache()
+
     def __repr__(self):
         return f"DeterministicModelWithCache(model_name_or_path={self.model_name_or_path}, cache_jsonl_path={self.cache_jsonl_path})"
 
